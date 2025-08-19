@@ -1,0 +1,1405 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowForge — Text→Diagram & Structured Flow</title>
+  <!-- Tailwind (no-build) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Mermaid for diagrams -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <!-- FileSaver (tiny util for downloads) -->
+  <script>
+    // Minimal FileSaver polyfill
+    function saveBlob(blob, filename){
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url; a.download = filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+  </script>
+  <style>
+    :root{ color-scheme: light; }
+    .card{ @apply rounded-2xl shadow-md bg-white; }
+    .btn{ @apply px-3 py-2 rounded-lg shadow-sm border bg-gray-50 border-gray-300 hover:bg-gray-100 active:scale-[.99] disabled:opacity-50 disabled:cursor-not-allowed font-medium text-gray-800; }
+    .btn-primary{ @apply bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 font-semibold; }
+    .label{ @apply text-sm font-medium text-gray-700; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .pill{ @apply text-xs inline-flex items-center px-2 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200; }
+    .small{ font-size: 12px; }
+    .section-title{ @apply text-lg font-semibold text-gray-900; }
+    .grid-cols-fit{ grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .mermaid svg{ width: 100%; height: auto; }
+    .mermaid .step-clickable{ cursor: pointer; }
+    .sticky-actions{ position: sticky; top: 0; z-index: 20; }
+    .hr{ height:1px; background:linear-gradient(90deg,transparent,rgba(0,0,0,.12),transparent); }
+    .resize-v{ resize: vertical; }
+    .edge-hint{ @apply text-xs text-gray-500; }
+    .edge-click{ cursor: pointer; }
+    .modal{ @apply fixed inset-0 hidden items-center justify-center bg-black/40 z-50; }
+    .modal.open{ @apply flex; }
+    #progress-overlay{ @apply fixed inset-0 z-50 hidden items-center justify-center bg-white/80 backdrop-blur-sm; }
+    .lang-btn{ @apply px-2 py-1 text-sm rounded-md hover:bg-indigo-100; }
+    .lang-btn.active{ @apply bg-indigo-600 text-white hover:bg-indigo-600; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 text-gray-900">
+
+  <!-- Progress Bar Overlay -->
+  <div id="progress-overlay">
+    <div class="w-full max-w-md text-center">
+      <div id="progress-text" class="font-semibold text-indigo-700 mb-2"></div>
+      <div class="w-full bg-gray-200 rounded-full h-2.5">
+        <div id="progress-bar" class="bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <header class="sticky top-0 z-40 backdrop-blur bg-white/80 border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
+      <div class="text-2xl font-bold">FlowForge</div>
+      <div class="flex items-center border border-gray-300 rounded-lg p-0.5">
+        <button id="lang-de" class="lang-btn">DE</button>
+        <button id="lang-en" class="lang-btn">EN</button>
+        <button id="lang-ru" class="lang-btn">RU</button>
+      </div>
+      <div class="hidden md:flex items-center gap-2">
+        <div class="pill">No‑build SPA</div>
+        <div class="pill">Mermaid</div>
+        <div class="pill">OpenRouter</div>
+      </div>
+      <div class="ml-auto flex items-center gap-2 flex-wrap">
+        <button id="btnUndo" class="btn" data-i18n-key="undo" data-i18n-prop="title">↶ Undo</button>
+        <button id="btnRedo" class="btn" data-i18n-key="redo" data-i18n-prop="title">↷ Redo</button>
+        <button id="btnReset" class="btn" data-i18n-key="reset_all" data-i18n-prop="title">Reset</button>
+        <div class="flex items-center gap-2 flex-wrap">
+            <button id="btnExportState" class="btn" data-i18n-key="export_json">Export JSON</button>
+            <button id="btnExportXML" class="btn" data-i18n-key="export_xml">Export XML</button>
+            <label class="btn cursor-pointer" data-i18n-key="import_state" data-i18n-prop="title">
+              <input id="fileImportState" type="file" accept=".json,.xml" class="hidden">
+              <span data-i18n-key="import">Import</span>
+            </label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+
+    <!-- What is this? Card -->
+    <section class="card p-4">
+        <h2 class="section-title" data-i18n-key="what_is_this_title">Was ist das?</h2>
+        <div id="app-explanation" class="mt-2 text-gray-700 space-y-2"></div>
+    </section>
+
+    <!-- API + Model Card -->
+    <section class="card p-4">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h2 class="section-title" data-i18n-key="api_model_title">API & Modell</h2>
+        <div class="text-xs text-gray-500" data-i18n-key="localstorage_notice">Speichert im LocalStorage</div>
+      </div>
+      <div class="grid md:grid-cols-3 gap-4 mt-2">
+        <div>
+          <label class="label">OpenRouter API Key</label>
+          <input id="inpKey" type="password" class="w-full mt-1 mono px-3 py-2 rounded-xl border border-gray-300" placeholder="sk-or-v1-…" />
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <button id="btnSaveKey" class="btn" data-i18n-key="save">Speichern</button>
+            <button id="btnClearKey" class="btn" data-i18n-key="delete">Löschen</button>
+            <button id="btnTestKey" class="btn" data-i18n-key="test">Testen</button>
+          </div>
+        </div>
+        <div>
+          <label class="label" data-i18n-key="model_slug">Modell‑Slug</label>
+          <input id="inpModel" class="w-full mt-1 mono px-3 py-2 rounded-xl border border-gray-300" value="google/gemini-2.5-flash" />
+          <p class="small text-gray-500 mt-1">e.g. <span class="mono">google/gemini-2.5-flash</span>, <span class="mono">anthropic/claude-3.5-sonnet</span></p>
+        </div>
+        <div>
+          <label class="label" data-i18n-key="temperature">Temperatur</label>
+          <input id="inpTemp" type="number" min="0" max="2" step="0.1" class="w-full mt-1 mono px-3 py-2 rounded-xl border border-gray-300" value="0.2"/>
+          <div class="mt-2">
+            <label class="label" data-i18n-key="offline_demo_label">Offline‑Demo
+              <input id="chkOffline" type="checkbox" class="ml-2 align-middle" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Input Card -->
+    <section class="card p-4">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h2 class="section-title" data-i18n-key="flow_description_title">Flow‑Beschreibung → Analyse</h2>
+        <div class="text-xs text-gray-500" data-i18n-key="flow_description_subtitle">Erste Version aus freiem Text erzeugen</div>
+      </div>
+      <textarea id="taSpec" class="w-full mt-2 resize-v min-h-[180px] px-3 py-2 rounded-xl border border-gray-300" data-i18n-key="flow_description_placeholder" data-i18n-prop="placeholder"></textarea>
+      <div class="mt-2 flex flex-wrap gap-2 items-center">
+        <button id="btnAnalyze" class="btn btn-primary" data-i18n-key="generate_diagram_button">Diagramm & Struktur erzeugen</button>
+        <select id="selExample" class="btn"></select>
+        <button id="btnLoadExample" class="btn" data-i18n-key="load_example">Beispiel laden</button>
+      </div>
+    </section>
+
+    <!-- Edit Card -->
+    <section class="card p-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="section-title" data-i18n-key="textual_editing_title">Textuelle Bearbeitung</h2>
+          <div class="text-xs text-gray-500" data-i18n-key="textual_editing_subtitle">Verweise auf Schrittnummern (S1, S2, …)</div>
+        </div>
+        <textarea id="taEdit" class="w-full mt-2 resize-v min-h-[120px] px-3 py-2 rounded-xl border border-gray-300" data-i18n-key="textual_editing_placeholder" data-i18n-prop="placeholder"></textarea>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button id="btnApplyEdit" class="btn btn-primary" data-i18n-key="apply_changes">Änderungen anwenden</button>
+        </div>
+      </section>
+
+    <!-- Dual View: Mermaid + Structured Text -->
+    <section class="grid gap-4 md:grid-cols-2">
+      <div class="card p-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="section-title" data-i18n-key="diagram_title">Diagramm (Mermaid)</h2>
+          <div class="flex gap-2">
+            <button id="btnCopyMermaid" class="btn" data-i18n-key="copy_mermaid">Mermaid kopieren</button>
+            <button id="btnPng" class="btn" data-i18n-key="download_png">PNG</button>
+          </div>
+        </div>
+        <div id="edge-hint-container" class="edge-hint mt-1"></div>
+        <div id="diagram" class="mt-3 border rounded-xl bg-white p-3 overflow-auto min-h-[260px]"></div>
+        <div class="mt-2 text-xs text-gray-600">Diagram gen-id: <span id="lblGenId" class="mono"></span></div>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="section-title" data-i18n-key="structured_text_title">Strukturierter Text</h2>
+          <div class="flex gap-2">
+            <button id="btnCopyStruct" class="btn" data-i18n-key="copy_text">Text kopieren</button>
+            <button id="btnCopyPRD" class="btn" data-i18n-key="copy_prd">PRD‑Block</button>
+          </div>
+        </div>
+        <pre id="structured" class="mt-3 mono text-[13px] whitespace-pre-wrap bg-gray-50 border rounded-xl p-3 min-h-[260px]"></pre>
+        <div class="mt-2 text-xs text-gray-600">Text-ID: <span id="lblTextId" class="mono"></span></div>
+      </div>
+    </section>
+
+    <!-- Main Actions: Execute -->
+    <section class="card p-4">
+        <div class="flex items-center gap-4 flex-wrap">
+            <button id="btnExecuteFlow" class="btn btn-primary" data-i18n-key="execute_flow">Flow ausführen</button>
+            <p id="execute-flow-desc" class="text-sm text-gray-600"></p>
+        </div>
+    </section>
+
+    <!-- Steps Table -->
+    <section class="card p-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 class="section-title" data-i18n-key="steps_table_title">Schritt-Tabelle</h2>
+            <div class="flex gap-2">
+                <button id="btnCopyCSV" class="btn" data-i18n-key="copy_csv">CSV kopieren</button>
+            </div>
+        </div>
+        <div class="overflow-auto mt-3">
+            <table id="tblSteps" class="w-full text-sm border border-gray-200 min-w-[860px]">
+                <thead class="bg-gray-50">
+                    <tr id="steps-table-header">
+                        <!-- Header cells are populated by JS -->
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="mt-2 text-xs text-gray-600">Table-ID: <span id="lblTableId" class="mono"></span></div>
+    </section>
+
+
+    <!-- Debug Section (Collapsible) -->
+    <section class="card p-4">
+      <details>
+        <summary class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="section-title" data-i18n-key="debug_log_title">Debug‑Log</h2>
+          <div class="flex gap-2">
+            <button id="btnCopyLog" class="btn" data-i18n-key="copy_log">Log kopieren</button>
+            <button id="btnClearLog" class="btn" data-i18n-key="clear_log">Log leeren</button>
+            <label class="label ml-2">Auto‑Scroll <input id="chkAutoscroll" type="checkbox" class="ml-2 align-middle" checked></label>
+          </div>
+        </summary>
+        <pre id="debug" class="mt-3 mono text-[12px] whitespace-pre-wrap bg-gray-50 border rounded-xl p-3 h-64 overflow-auto"></pre>
+      </details>
+    </section>
+
+  </main>
+
+  <!-- Modal for I/O examples -->
+  <div id="ioModal" class="modal" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-2xl w-full max-w-4xl p-4 shadow-xl max-h-[90vh] flex flex-col">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 id="ioTitle" class="text-lg font-semibold"></h3>
+          <p id="ioSubtitle" class="text-sm text-gray-500"></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnGenAll" class="btn" data-i18n-key="generate_all_examples_button" data-i18n-prop="title"></button>
+          <button id="btnCloseModal" class="btn" data-i18n-key="close">Schließen</button>
+        </div>
+      </div>
+      <div class="hr my-3"></div>
+      <div class="overflow-y-auto">
+        <div id="modal-content" class="grid md:grid-cols-2 gap-4">
+            <!-- Content dynamically inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Execution -->
+  <div id="executionModal" class="modal" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-2xl w-full max-w-4xl p-4 shadow-xl max-h-[90vh] flex flex-col">
+        <div class="flex items-start justify-between gap-4">
+            <h3 id="executionTitle" class="text-lg font-semibold"></h3>
+            <button id="btnCloseExecutionModal" class="btn" data-i18n-key="close">Schließen</button>
+        </div>
+        <div class="hr my-3"></div>
+        <div id="execution-panel" class="overflow-y-auto space-y-4">
+            <!-- Execution steps will be rendered here -->
+        </div>
+    </div>
+  </div>
+
+
+  <footer class="max-w-7xl mx-auto px-4 pb-10 text-center text-xs text-gray-500">
+    <div class="hr my-6"></div>
+    <p id="footer-text"></p>
+  </footer>
+
+  <script>
+    /***********************
+     * i18n & Language
+     ***********************/
+    const I18N = {
+      // General UI
+      what_is_this_title: { de: 'Was ist das?', en: 'What is this?', ru: 'Что это?' },
+      app_explanation: {
+        de: `<p><b>FlowForge</b> ist ein Werkzeug, das Prozessbeschreibungen in natürlicher Sprache in strukturierte Diagramme und Daten umwandelt.</p>
+             <ol class="list-decimal list-inside mt-2">
+               <li><b>Beschreiben:</b> Schreiben Sie einen Prozessablauf in das Textfeld unten.</li>
+               <li><b>Generieren:</b> Klicken Sie auf "Diagramm & Struktur erzeugen", um mit KI ein Flussdiagramm und eine strukturierte Liste zu erstellen.</li>
+               <li><b>Bearbeiten & Verfeinern:</b> Passen Sie den Flow durch textuelle Anweisungen an oder klicken Sie auf Diagramm-Schritte, um Beispiele zu sehen/generieren.</li>
+               <li><b>Exportieren:</b> Laden Sie das Ergebnis als Diagramm-Bild (PNG), CSV-Tabelle oder als Projektdatei (JSON/XML) herunter.</li>
+             </ol>`,
+        en: `<p><b>FlowForge</b> is a tool that transforms process descriptions in natural language into structured diagrams and data.</p>
+             <ol class="list-decimal list-inside mt-2">
+               <li><b>Describe:</b> Write a process flow in the text area below.</li>
+               <li><b>Generate:</b> Click "Generate Diagram & Structure" to create a flowchart and a structured list using AI.</li>
+               <li><b>Edit & Refine:</b> Adjust the flow with textual instructions or click on diagram steps to view/generate examples.</li>
+               <li><b>Export:</b> Download the result as a diagram image (PNG), a CSV table, or a project file (JSON/XML).</li>
+             </ol>`,
+        ru: `<p><b>FlowForge</b> — это инструмент, который преобразует описания процессов на естественном языке в структурированные диаграммы и данные.</p>
+             <ol class="list-decimal list-inside mt-2">
+               <li><b>Опишите:</b> Напишите технологический процесс в текстовом поле ниже.</li>
+               <li><b>Сгенерируйте:</b> Нажмите "Создать диаграмму и структуру", чтобы с помощью ИИ создать блок-схему и структурированный список.</li>
+               <li><b>Редактируйте и уточняйте:</b> Корректируйте процесс с помощью текстовых инструкций или нажимайте на шаги диаграммы для просмотра/генерации примеров.</li>
+               <li><b>Экспортируйте:</b> Загрузите результат в виде изображения диаграммы (PNG), таблицы CSV или файла проекта (JSON/XML).</li>
+             </ol>`
+      },
+      api_model_title: { de: 'API & Modell', en: 'API & Model', ru: 'API и модель' },
+      localstorage_notice: { de: 'Speichert im LocalStorage', en: 'Saves in LocalStorage', ru: 'Сохраняется в LocalStorage' },
+      save: { de: 'Speichern', en: 'Save', ru: 'Сохранить' },
+      delete: { de: 'Löschen', en: 'Delete', ru: 'Удалить' },
+      test: { de: 'Testen', en: 'Test', ru: 'Тест' },
+      model_slug: { de: 'Modell‑Slug', en: 'Model Slug', ru: 'Идентификатор модели' },
+      temperature: { de: 'Temperatur', en: 'Temperature', ru: 'Температура' },
+      offline_demo_label: { de: 'Offline‑Demo', en: 'Offline Demo', ru: 'Офлайн-демо' },
+      flow_description_title: { de: 'Flow‑Beschreibung → Analyse', en: 'Flow Description → Analysis', ru: 'Описание процесса → Анализ' },
+      flow_description_subtitle: { de: 'Erste Version aus freiem Text erzeugen', en: 'Create initial version from free text', ru: 'Создать первую версию из текста' },
+      flow_description_placeholder: { de: 'Beschreibe deinen Flow in natürlicher Sprache.', en: 'Describe your flow in natural language.', ru: 'Опишите ваш процесс на естественном языке.' },
+      generate_diagram_button: { de: 'Diagramm & Struktur erzeugen', en: 'Generate Diagram & Structure', ru: 'Создать диаграмму и структуру' },
+      load_example: { de: 'Beispiel laden', en: 'Load Example', ru: 'Загрузить пример' },
+      textual_editing_title: { de: 'Textuelle Bearbeitung', en: 'Textual Editing', ru: 'Текстовое редактирование' },
+      textual_editing_subtitle: { de: 'Verweise auf Schrittnummern (S1, S2, …)', en: 'Reference step numbers (S1, S2, …)', ru: 'Ссылайтесь на номера шагов (S1, S2, ...)' },
+      textual_editing_placeholder: { de: 'Beispiel: Füge nach S3 einen Schritt ein: \'Human Approval\' mit Output: approved:boolean; Verknüpfe S3→S4 (approved), S3→S2 (rejected).', en: 'Example: After S3, insert a step: \'Human Approval\' with output: approved:boolean; Link S3→S4 (approved), S3→S2 (rejected).', ru: 'Пример: После S3 вставить шаг: \'Human Approval\' с выходом: approved:boolean; Связать S3→S4 (approved), S3→S2 (rejected).' },
+      apply_changes: { de: 'Änderungen anwenden', en: 'Apply Changes', ru: 'Применить изменения' },
+      diagram_title: { de: 'Diagramm (Mermaid)', en: 'Diagram (Mermaid)', ru: 'Диаграмма (Mermaid)' },
+      copy_mermaid: { de: 'Mermaid kopieren', en: 'Copy Mermaid', ru: 'Копировать Mermaid' },
+      download_png: { de: 'PNG', en: 'PNG', ru: 'PNG' },
+      edge_hint: { 
+        de: 'Kante: <span class="mono">bedingung? out:outputs ; reads:shared_reads</span>. Klicken Sie auf einen Schritt für Beispiele.', 
+        en: 'Edge: <span class="mono">condition? out:outputs ; reads:shared_reads</span>. Click a step for examples.',
+        ru: 'Связь: <span class="mono">условие? out:выходы ; reads:читаемые_общие</span>. Нажмите на шаг для примеров.' 
+      },
+      structured_text_title: { de: 'Strukturierter Text', en: 'Structured Text', ru: 'Структурированный текст' },
+      copy_text: { de: 'Text kopieren', en: 'Copy Text', ru: 'Копировать текст' },
+      copy_prd: { de: 'PRD‑Block', en: 'PRD Block', ru: 'PRD-блок' },
+      steps_table_title: { de: 'Schritt-Tabelle', en: 'Steps Table', ru: 'Таблица шагов' },
+      copy_csv: { de: 'CSV kopieren', en: 'Copy CSV', ru: 'Копировать CSV' },
+      table_header: {
+          de: ['#', 'Kurzbezeichnung', 'Inputs', 'Outputs', 'Shared (writes)', 'Reads (shared)', 'Aktionen'],
+          en: ['#', 'Short Name', 'Inputs', 'Outputs', 'Shared (writes)', 'Reads (shared)', 'Actions'],
+          ru: ['#', 'Краткое имя', 'Входы', 'Выходы', 'Общие (запись)', 'Чтение (общие)', 'Действия'],
+      },
+      table_show_examples: { de: 'Beispiele…', en: 'Examples…', ru: 'Примеры…' },
+      debug_log_title: { de: 'Debug‑Log', en: 'Debug Log', ru: 'Журнал отладки' },
+      copy_log: { de: 'Log kopieren', en: 'Copy Log', ru: 'Копировать лог' },
+      clear_log: { de: 'Log leeren', en: 'Clear Log', ru: 'Очистить лог' },
+      // Header buttons
+      undo: { de: 'Rückgängig', en: 'Undo', ru: 'Отменить' },
+      redo: { de: 'Wiederholen', en: 'Redo', ru: 'Повторить' },
+      reset_all: { de: 'Alles zurücksetzen', en: 'Reset All', ru: 'Сбросить всё' },
+      export_json: { de: 'Export JSON', en: 'Export JSON', ru: 'Экспорт JSON' },
+      export_xml: { de: 'Export XML', en: 'Export XML', ru: 'Экспорт XML' },
+      import: { de: 'Import', en: 'Import', ru: 'Импорт' },
+      import_state: { de: 'Zustand importieren', en: 'Import state', ru: 'Импорт состояния' },
+      // Modal
+      close: { de: 'Schließen', en: 'Close', ru: 'Закрыть' },
+      generate_all_examples_button: { de: 'Alle Beispiele generieren', en: 'Generate All Examples', ru: 'Сгенерировать все примеры' },
+      inputs_reads_title: { de: 'Inputs & Gelesene Shared-Daten', en: 'Inputs & Shared Reads', ru: 'Входы и Читаемые общие данные' },
+      outputs_writes_title: { de: 'Outputs & Geschriebene Shared-Daten', en: 'Outputs & Shared Writes', ru: 'Выходы и Записываемые общие данные' },
+      no_inputs_defined: { de: 'Keine Inputs/Reads definiert.', en: 'No Inputs/Reads defined.', ru: 'Входы/чтения не определены.'},
+      no_outputs_defined: { de: 'Keine Outputs definiert.', en: 'No Outputs defined.', ru: 'Выходы не определены.' },
+      shared_writes_label: { de: 'Schreibt in Shared:', en: 'Writes to Shared:', ru: 'Записывает в общие:' },
+      generate_ai_example: { de: 'KI-Beispiel', en: 'AI Example', ru: 'Пример от ИИ' },
+      // API call progress
+      api_progress_text: { de: 'KI denkt nach... Geschätzte Zeit: {s}s', en: 'AI is thinking... Estimated time: {s}s', ru: 'ИИ думает... Примерное время: {s}с' },
+      // Execution
+      execute_flow: { de: 'Flow ausführen', en: 'Execute Flow', ru: 'Выполнить процесс' },
+      execute_flow_desc: { de: 'Simulieren Sie den Ablauf Schritt für Schritt. Eine KI generiert die Ergebnisse für jeden Schritt.', en: 'Simulate the flow step by step. An AI will generate the output for each step.', ru: 'Симулируйте процесс шаг за шагом. ИИ будет генерировать результаты для каждого шага.'},
+      execution_modal_title: { de: 'Flow-Ausführung', en: 'Flow Execution', ru: 'Выполнение процесса' },
+      run_step_button: { de: 'Schritt ausführen', en: 'Run Step', ru: 'Выполнить шаг' },
+      step_input_title: { de: 'Inputs für diesen Schritt', en: 'Inputs for this step', ru: 'Входы для этого шага' },
+      step_output_title: { de: 'KI-generierter Output', en: 'AI-generated Output', ru: 'Сгенерированный ИИ выход' },
+      step_pending: { de: 'Ausstehend', en: 'Pending', ru: 'Ожидание' },
+      step_completed: { de: 'Abgeschlossen', en: 'Completed', ru: 'Завершено' },
+      // Footer
+      footer_text: {
+          de: 'Diagrammart: <strong>Mermaid‑Flowchart (graph TD)</strong> — klar, flexibel, nicht überladen.',
+          en: 'Diagram type: <strong>Mermaid‑Flowchart (graph TD)</strong> — clear, flexible, not overloaded.',
+          ru: 'Тип диаграммы: <strong>Mermaid‑Flowchart (graph TD)</strong> — ясная, гибкая, не перегруженная.',
+      }
+    };
+    
+    /***********************
+     * Examples
+     ***********************/
+    const EXAMPLES = {
+      'doc_illustration': {
+        de: `Titel: Erstellung eines illustrierten Dokuments aus einem PDF
+
+1. PDF extrahieren: Wandelt ein PDF in reinen Text und Basis-HTML um. Outputs: rohtext, basis_html. Schreibt in Shared: doc_id, seiten_mapping, text_laenge.
+2. Text zerlegen (Chunking): Teilt den Rohtext in kleinere Stücke für die KI-Verarbeitung (ca. 2000 Token). Output: text_chunks[].
+3. Szenen pro Chunk erkennen: Identifiziert handelbare Szenen innerhalb eines Text-Chunks. Input: text_chunk. Output: szenen[]. Schreibt in Shared: szenen_index.
+4. Prompt für Illustration generieren: Erstellt aus einer Szene einen detaillierten Bild-Prompt. Input: szene. Liest aus Shared: charakter_datenbank, stil_vorgaben. Output: bild_prompt.
+5. Illustration generieren: Sendet den Prompt an eine Bild-API. Input: bild_prompt. Output: szenen_bild.
+6. Menschliche Freigabe: Ein Nutzer prüft das generierte Bild. Input: szenen_bild. Output: freigabe_status (boolean).
+7. Bild ins HTML einfügen: Platziert das freigegebene Bild an der korrekten Stelle im HTML. Inputs: szenen_bild, freigabe_status. Liest aus Shared: szenen_index. Output: html_mit_bild.
+8. Enddokumente erstellen: Wandelt das finale HTML in DOCX und PDF um. Input: html_mit_bild. Outputs: buch.docx, buch.pdf.
+
+Shared-Speicher: doc_id, seiten_mapping, text_laenge, szenen_index, stil_vorgaben, charakter_datenbank.
+Verknüpfungen: Schritt 6 (Menschliche Freigabe) hat zwei Ausgänge: 'approved' zu Schritt 7, 'rejected' zurück zu Schritt 4.`,
+        en: `Title: Creating an illustrated document from a PDF
+
+1. Extract PDF: Converts a PDF into plain text and base HTML. Outputs: raw_text, base_html. Writes to Shared: doc_id, page_mapping, text_length.
+2. Chunk Text: Splits the raw text into smaller pieces for AI processing (approx. 2000 tokens). Output: text_chunks[].
+3. Detect Scenes per Chunk: Identifies actionable scenes within a text chunk. Input: text_chunk. Output: scenes[]. Writes to Shared: scene_index.
+4. Generate Illustration Prompt: Creates a detailed image prompt from a scene description. Input: scene. Reads from Shared: character_database, style_defaults. Output: image_prompt.
+5. Generate Illustration: Sends the prompt to an image API. Input: image_prompt. Output: scene_image.
+6. Human Approval: A user reviews the generated image. Input: scene_image. Output: approval_status (boolean).
+7. Insert Image into HTML: Places the approved image at the correct position in the HTML. Inputs: scene_image, approval_status. Reads from Shared: scene_index. Output: html_with_image.
+8. Create Final Documents: Converts the final HTML into DOCX and PDF. Input: html_with_image. Outputs: book.docx, book.pdf.
+
+Shared Memory: doc_id, page_mapping, text_length, scene_index, style_defaults, character_database.
+Links: Step 6 (Human Approval) has two outputs: 'approved' to Step 7, 'rejected' back to Step 4.`,
+        ru: `Название: Создание иллюстрированного документа из PDF
+
+1. Извлечь из PDF: Преобразует PDF в обычный текст и базовый HTML. Выходы: raw_text, base_html. Записывает в общую память: doc_id, page_mapping, text_length.
+2. Разбить текст на части (Chunking): Делит необработанный текст на более мелкие фрагменты для обработки ИИ (около 2000 токенов). Выход: text_chunks[].
+3. Определить сцены в каждом фрагменте: Идентифицирует сцены для иллюстрации в каждом фрагменте текста. Вход: text_chunk. Выход: scenes[]. Записывает в общую память: scene_index.
+4. Сгенерировать промпт для иллюстрации: Создает подробный промпт для изображения на основе описания сцены. Вход: scene. Читает из общей памяти: character_database, style_defaults. Выход: image_prompt.
+5. Сгенерировать иллюстрацию: Отправляет промпт в API для генерации изображений. Вход: image_prompt. Выход: scene_image.
+6. Подтверждение человеком: Пользователь проверяет сгенерированное изображение. Вход: scene_image. Выход: approval_status (boolean).
+7. Вставить изображение в HTML: Размещает одобренное изображение в нужном месте в HTML. Входы: scene_image, approval_status. Читает из общей памяти: scene_index. Выход: html_with_image.
+8. Создать итоговые документы: Преобразует финальный HTML в DOCX и PDF. Вход: html_with_image. Выходы: book.docx, book.pdf.
+
+Общая память: doc_id, page_mapping, text_length, scene_index, style_defaults, character_database.
+Связи: Шаг 6 (Подтверждение человеком) имеет два выхода: 'approved' к шагу 7, 'rejected' обратно к шагу 4.`
+      },
+      'story_pingpong': {
+          de: `Titel: Interaktives Story-Pingpong-Spiel
+
+1. Spiel initialisieren: Das Spiel wird gestartet und die KI schreibt die ersten 1-2 Sätze der Geschichte. Output: story_intro. Schreibt in Shared: story_genre, full_story_text.
+2. Frage und Optionen generieren: Die KI stellt eine offene Frage zur Fortsetzung der Geschichte und schlägt 3 mögliche Antworten vor. Input: aktueller_text. Output: frage, optionen[].
+3. Benutzereingabe: Der Benutzer wählt eine der Optionen oder gibt eine eigene Antwort ein. Input: frage, optionen. Output: user_choice.
+4. Antwort integrieren: Die KI baut die Antwort des Benutzers organisch in die Geschichte ein. Inputs: aktueller_text, user_choice. Output: story_update. Schreibt in Shared: full_story_text.
+5. Witzigen Kommentar abgeben: Die KI generiert einen kurzen, ironischen Kommentar zum Beitrag des Benutzers. Input: user_choice. Output: ai_comment.
+6. Endbedingung prüfen: Prüft, ob die Geschichte eine maximale Länge erreicht hat oder der Benutzer das Spiel beenden möchte. Input: full_story_text. Output: is_finished (boolean).
+7. Spiel beenden: Die KI schreibt einen abschließenden Satz und zeigt die gesamte Geschichte an. Input: full_story_text. Output: final_story.
+
+Verknüpfungen: Schritt 6 hat zwei Ausgänge. Wenn is_finished 'false' ist, geht es zurück zu Schritt 2. Wenn 'true', geht es zu Schritt 7.`,
+          en: `Title: Interactive Story Ping-Pong Game
+
+1. Initialize Game: The game starts and the AI writes the first 1-2 sentences of the story. Output: story_intro. Writes to Shared: story_genre, full_story_text.
+2. Generate Question and Options: The AI asks an open-ended question on how to continue the story and suggests 3 possible answers. Input: current_text. Output: question, options[].
+3. User Input: The user selects one of the options or provides their own answer. Input: question, options. Output: user_choice.
+4. Integrate Response: The AI organically incorporates the user's response into the story. Inputs: current_text, user_choice. Output: story_update. Writes to Shared: full_story_text.
+5. Make a Witty Comment: The AI generates a short, ironic comment on the user's contribution. Input: user_choice. Output: ai_comment.
+6. Check End Condition: Checks if the story has reached a maximum length or if the user wants to end the game. Input: full_story_text. Output: is_finished (boolean).
+7. End Game: The AI writes a concluding sentence and displays the entire story. Input: full_story_text. Output: final_story.
+
+Links: Step 6 has two outputs. If is_finished is 'false', it loops back to Step 2. If 'true', it proceeds to Step 7.`,
+          ru: `Название: Интерактивная игра "Словесный пинг-понг"
+
+1. Инициализировать игру: Игра начинается, и ИИ пишет первые 1-2 предложения истории. Выход: story_intro. Записывает в общую память: story_genre, full_story_text.
+2. Сгенерировать вопрос и варианты: ИИ задает открытый вопрос о том, как продолжить историю, и предлагает 3 возможных ответа. Вход: current_text. Выход: question, options[].
+3. Ввод пользователя: Пользователь выбирает один из вариантов или дает свой собственный ответ. Вход: question, options. Выход: user_choice.
+4. Интегрировать ответ: ИИ органично встраивает ответ пользователя в историю. Входы: current_text, user_choice. Выход: story_update. Записывает в общую память: full_story_text.
+5. Сделать остроумный комментарий: ИИ генерирует короткий, ироничный комментарий к вкладу пользователя. Вход: user_choice. Выход: ai_comment.
+6. Проверить условие окончания: Проверяет, достигла ли история максимальной длины или хочет ли пользователь закончить игру. Вход: full_story_text. Выход: is_finished (boolean).
+7. Закончить игру: ИИ пишет заключительное предложение и отображает всю историю. Вход: full_story_text. Выход: final_story.
+
+Связи: Шаг 6 имеет два выхода. Если is_finished равно 'false', цикл возвращается к шагу 2. Если 'true', он переходит к шагу 7.`
+      },
+      'therapie_game': {
+          de: `Titel: Kartenspiel "Therapie" (vereinfacht)
+
+1. Runden-Setup: Eine Frage und 6 mögliche Antworten werden für die Runde angezeigt. Liest aus Shared: fragen_pool. Output: aktuelle_frage, antwort_optionen[]. Schreibt in Shared: runden_nummer.
+2. Spieler 1 (Therapeut) wählt geheim: Spieler 1 wählt die Antwort, die er für den "Patienten" (eine fiktive Person oder ein Mitspieler) am passendsten hält. Input: antwort_optionen. Output: geheim_wahl_p1.
+3. Spieler 2 (Patient) rät: Spieler 2 versucht zu erraten, welche Antwort Spieler 1 gewählt hat. Input: antwort_optionen. Output: geratene_wahl_p2.
+4. Auswertung: Die beiden Wahlen werden verglichen. Input: geheim_wahl_p1, geratene_wahl_p2. Output: ist_treffer (boolean).
+5. Punkte vergeben: Wenn die Wahlen übereinstimmen (ist_treffer ist true), erhält Spieler 2 einen Punkt. Input: ist_treffer. Schreibt in Shared: punktestand_p2.
+6. Siegbedingung prüfen: Prüft, ob ein Spieler die zum Sieg benötigte Punktzahl erreicht hat. Liest aus Shared: punktestand_p2, sieg_punktzahl. Output: spiel_beendet (boolean).
+7. Nächste Runde / Spielende: Bei 'false' wird die nächste Runde gestartet (zurück zu S1). Bei 'true' wird der Gewinner bekannt gegeben.
+
+Shared-Speicher: fragen_pool, runden_nummer, punktestand_p2, sieg_punktzahl.`,
+          en: `Title: Card Game "Therapy" (simplified)
+
+1. Round Setup: A question and 6 possible answers are displayed for the round. Reads from Shared: question_pool. Output: current_question, answer_options[]. Writes to Shared: round_number.
+2. Player 1 (Therapist) chooses secretly: Player 1 selects the answer they find most fitting for the "patient" (a fictional person or fellow player). Input: answer_options. Output: secret_choice_p1.
+3. Player 2 (Patient) guesses: Player 2 tries to guess which answer Player 1 chose. Input: answer_options. Output: guessed_choice_p2.
+4. Evaluation: The two choices are compared. Input: secret_choice_p1, guessed_choice_p2. Output: is_match (boolean).
+5. Award Points: If the choices match (is_match is true), Player 2 gets a point. Input: is_match. Writes to Shared: score_p2.
+6. Check Win Condition: Checks if a player has reached the score needed to win. Reads from Shared: score_p2, winning_score. Output: game_over (boolean).
+7. Next Round / Game End: If 'false', the next round starts (back to S1). If 'true', the winner is announced.
+
+Shared Memory: question_pool, round_number, score_p2, winning_score.`,
+          ru: `Название: Карточная игра "Терапия" (упрощенная версия)
+
+1. Подготовка раунда: На экране отображается вопрос и 6 возможных ответов для раунда. Читает из общей памяти: question_pool. Выход: current_question, answer_options[]. Записывает в общую память: round_number.
+2. Игрок 1 (Терапевт) выбирает тайно: Игрок 1 выбирает ответ, который, по его мнению, лучше всего подходит "пациенту" (вымышленному персонажу или другому игроку). Вход: answer_options. Выход: secret_choice_p1.
+3. Игрок 2 (Пациент) угадывает: Игрок 2 пытается угадать, какой ответ выбрал Игрок 1. Вход: answer_options. Выход: guessed_choice_p2.
+4. Оценка: Два выбора сравниваются. Вход: secret_choice_p1, guessed_choice_p2. Выход: is_match (boolean).
+5. Начисление очков: Если выборы совпадают (is_match равно true), Игрок 2 получает очко. Вход: is_match. Записывает в общую память: score_p2.
+6. Проверка условия победы: Проверяет, набрал ли игрок необходимое для победы количество очков. Читает из общей памяти: score_p2, winning_score. Выход: game_over (boolean).
+7. Следующий раунд / Конец игры: Если 'false', начинается следующий раунд (возврат к S1). Если 'true', объявляется победитель.
+
+Общая память: question_pool, round_number, score_p2, winning_score.`
+      },
+      'support_chatbot': {
+          de: `Titel: Kunden-Support-Chatbot
+
+1. Begrüßung und Problem-Erfassung: Der Bot begrüßt den Nutzer und fragt nach dem Anliegen. Output: user_problem_description.
+2. Problem klassifizieren: Die KI analysiert die Beschreibung und ordnet sie einer Kategorie zu (z.B. 'Rechnung', 'Technik', 'Login'). Input: user_problem_description. Output: problem_category.
+3. Wissensdatenbank abfragen: Der Bot sucht in einer internen Datenbank nach Standardlösungen für die erkannte Kategorie. Input: problem_category. Output: standard_solution_article.
+4. Lösung vorschlagen: Der Bot präsentiert dem Nutzer den gefundenen Lösungsartikel. Input: standard_solution_article. Output: bot_suggestion.
+5. Nutzer-Feedback einholen: Der Bot fragt, ob das Problem damit gelöst wurde. Output: user_feedback (solved/unsolved).
+6. Eskalation an Menschen: Wenn das Problem ungelöst ist, erstellt der Bot ein Ticket und leitet es an einen menschlichen Mitarbeiter weiter. Input: user_feedback='unsolved'. Output: support_ticket. Schreibt in Shared: case_id.
+7. Abschluss: Wenn das Problem gelöst ist, beendet der Bot die Konversation. Input: user_feedback='solved'. Output: closing_message.
+
+Verknüpfungen: Schritt 5 verzweigt basierend auf dem user_feedback zu Schritt 6 oder Schritt 7.`,
+          en: `Title: Customer Support Chatbot
+
+1. Greet and Capture Issue: The bot greets the user and asks for their issue. Output: user_problem_description.
+2. Classify Problem: The AI analyzes the description and assigns it to a category (e.g., 'Billing', 'Technical', 'Login'). Input: user_problem_description. Output: problem_category.
+3. Query Knowledge Base: The bot searches an internal database for standard solutions for the identified category. Input: problem_category. Output: standard_solution_article.
+4. Propose Solution: The bot presents the found solution article to the user. Input: standard_solution_article. Output: bot_suggestion.
+5. Get User Feedback: The bot asks if the issue was resolved. Output: user_feedback (solved/unsolved).
+6. Escalate to Human: If the issue is unsolved, the bot creates a ticket and forwards it to a human agent. Input: user_feedback='unsolved'. Output: support_ticket. Writes to Shared: case_id.
+7. Finalize: If the issue is solved, the bot ends the conversation. Input: user_feedback='solved'. Output: closing_message.
+
+Links: Step 5 branches based on user_feedback to either Step 6 or Step 7.`,
+          ru: `Название: Чат-бот службы поддержки
+
+1. Приветствие и сбор информации: Бот приветствует пользователя и спрашивает о его проблеме. Выход: user_problem_description.
+2. Классифицировать проблему: ИИ анализирует описание и относит его к категории (например, 'Счета', 'Техническая', 'Вход'). Вход: user_problem_description. Выход: problem_category.
+3. Запросить базу знаний: Бот ищет в внутренней базе данных стандартные решения для определенной категории. Вход: problem_category. Выход: standard_solution_article.
+4. Предложить решение: Бот представляет пользователю найденную статью с решением. Вход: standard_solution_article. Выход: bot_suggestion.
+5. Получить обратную связь: Бот спрашивает, была ли решена проблема. Выход: user_feedback (solved/unsolved).
+6. Эскалация на человека: Если проблема не решена, бот создает заявку и передает ее сотруднику. Вход: user_feedback='unsolved'. Выход: support_ticket. Записывает в общую память: case_id.
+7. Завершение: Если проблема решена, бот завершает разговор. Вход: user_feedback='solved'. Выход: closing_message.
+
+Связи: Шаг 5 разветвляется в зависимости от user_feedback на шаг 6 или шаг 7.`
+      },
+      'recipe_flow': {
+          de: `Titel: Rezept für einen Schokoladenkuchen
+
+1. Zutaten vorbereiten: Alle trockenen und feuchten Zutaten werden abgemessen und bereitgestellt. Output: vorbereitete_zutaten. Schreibt in Shared: ofentemperatur.
+2. Trockene Zutaten mischen: Mehl, Zucker, Kakao und Backpulver werden in einer Schüssel vermischt. Input: vorbereitete_zutaten. Output: trockene_mischung.
+3. Feuchte Zutaten mischen: Eier, Milch und Öl werden in einer separaten Schüssel verquirlt. Input: vorbereitete_zutaten. Output: feuchte_mischung.
+4. Teig herstellen: Die feuchte Mischung wird langsam unter die trockene Mischung gehoben, bis ein glatter Teig entsteht. Inputs: trockene_mischung, feuchte_mischung. Output: kuchenteig.
+5. Backen: Der Teig wird in eine Form gefüllt und im vorgeheizten Ofen gebacken. Input: kuchenteig. Liest aus Shared: ofentemperatur. Output: gebackener_kuchen.
+6. Abkühlen lassen: Der Kuchen wird aus dem Ofen genommen und muss vollständig abkühlen. Input: gebackener_kuchen. Output: abgekuehlter_kuchen.
+7. Dekorieren: Der abgekühlte Kuchen wird mit Glasur überzogen. Input: abgekuehlter_kuchen. Output: fertiger_kuchen.
+8. Servieren: Der Kuchen ist bereit zum Servieren.`,
+          en: `Title: Chocolate Cake Recipe
+
+1. Prepare Ingredients: All dry and wet ingredients are measured and prepared. Output: prepared_ingredients. Writes to Shared: oven_temperature.
+2. Mix Dry Ingredients: Flour, sugar, cocoa, and baking powder are mixed in a bowl. Input: prepared_ingredients. Output: dry_mix.
+3. Mix Wet Ingredients: Eggs, milk, and oil are whisked in a separate bowl. Input: prepared_ingredients. Output: wet_mix.
+4. Make Batter: The wet mix is slowly folded into the dry mix until a smooth batter is formed. Inputs: dry_mix, wet_mix. Output: cake_batter.
+5. Bake: The batter is poured into a pan and baked in the preheated oven. Input: cake_batter. Reads from Shared: oven_temperature. Output: baked_cake.
+6. Cool Down: The cake is removed from the oven and must cool completely. Input: baked_cake. Output: cooled_cake.
+7. Decorate: The cooled cake is covered with frosting. Input: cooled_cake. Output: finished_cake.
+8. Serve: The cake is ready to be served.`,
+          ru: `Название: Рецепт шоколадного торта
+
+1. Подготовить ингредиенты: Все сухие и влажные ингредиенты отмеряются и подготавливаются. Выход: prepared_ingredients. Записывает в общую память: oven_temperature.
+2. Смешать сухие ингредиенты: Мука, сахар, какао и разрыхлитель смешиваются в миске. Вход: prepared_ingredients. Выход: dry_mix.
+3. Смешать влажные ингредиенты: Яйца, молоко и масло взбиваются в отдельной миске. Вход: prepared_ingredients. Выход: wet_mix.
+4. Приготовить тесто: Влажная смесь медленно вмешивается в сухую до образования однородного теста. Входы: dry_mix, wet_mix. Выход: cake_batter.
+5. Выпекать: Тесто выливается в форму и выпекается в предварительно разогретой духовке. Вход: cake_batter. Читает из общей памяти: oven_temperature. Выход: baked_cake.
+6. Остудить: Торт вынимается из духовки и должен полностью остыть. Вход: baked_cake. Выход: cooled_cake.
+7. Украсить: Остывший торт покрывается глазурью. Вход: cooled_cake. Выход: finished_cake.
+8. Подавать: Торт готов к подаче.`
+      }
+    };
+    
+    /***********************
+     * Mermaid init
+     ***********************/
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', flowchart: { curve: 'basis' } });
+
+    /***********************
+     * State & Utilities
+     ***********************/
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    const state = {
+      json: { title: '', steps: [], links: [] },
+      mermaid: '',
+      structuredText: '',
+      svg: '',
+      genId: '',
+      textId: '',
+      tableId: '',
+      history: [],
+      future: [],
+      linkLabels: [],
+      activeLinkIdx: null,
+      activeStepId: null,
+      lang: 'de',
+      execution: {
+          active: false,
+          currentStepIdx: -1,
+          stepData: {}, // { S1: {outputs: {...}}, S2: ... }
+      },
+    };
+
+    function uuid(n=8){
+      return (Date.now().toString(36) + Math.random().toString(36).slice(2)).slice(0,n);
+    }
+
+    function log(evt, obj){
+      try{
+        const now = new Date().toISOString();
+        const line = `[${now}] ${evt}\n` + (obj ? JSON.stringify(obj, null, 2) : '');
+        const dbg = $('#debug');
+        dbg.textContent += (dbg.textContent ? "\n" : "") + line + "\n";
+        if($('#chkAutoscroll')?.checked){ dbg.scrollTop = dbg.scrollHeight; }
+      }catch(e){ console.warn('log failed', e); }
+    }
+    
+    // LANGUAGE & UI UPDATE
+    function setLanguage(lang) {
+        state.lang = lang;
+        localStorage.setItem('flowforge.lang', lang);
+        $$('[data-i18n-key]').forEach(el => {
+            const key = el.dataset.i18nKey;
+            const prop = el.dataset.i18nProp || (['INPUT', 'TEXTAREA'].includes(el.tagName) ? 'placeholder' : 'innerHTML');
+            if (I18N[key] && I18N[key][lang]) {
+                el[prop] = I18N[key][lang];
+            }
+        });
+        
+        $$('.lang-btn').forEach(btn => btn.classList.remove('active'));
+        $('#lang-' + lang).classList.add('active');
+        
+        // Update dynamic content
+        $('#app-explanation').innerHTML = I18N.app_explanation[lang];
+        $('#edge-hint-container').innerHTML = I18N.edge_hint[lang];
+        $('#execute-flow-desc').innerText = I18N.execute_flow_desc[lang];
+        $('#footer-text').innerHTML = I18N.footer_text[lang];
+        populateExampleSelector();
+        renderAll();
+    }
+    
+    function populateExampleSelector() {
+        const sel = $('#selExample');
+        const currentVal = sel.value;
+        sel.innerHTML = '';
+        Object.keys(EXAMPLES).forEach(key => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = EXAMPLES[key][state.lang].match(/Titel: (.*)/)?.[1] || key;
+            sel.appendChild(option);
+        });
+        if (currentVal) sel.value = currentVal;
+    }
+
+    function pushHistory(){
+      state.history.push(JSON.stringify(state.json));
+      if(state.history.length>100) state.history.shift();
+      state.future.length = 0; // clear redo
+      updateUndoRedoButtons();
+    }
+
+    function undo(){
+      if(!state.history.length) return;
+      state.future.push(JSON.stringify(state.json));
+      const prev = state.history.pop();
+      state.json = JSON.parse(prev);
+      renderAll();
+      updateUndoRedoButtons();
+    }
+
+    function redo(){
+      if(!state.future.length) return;
+      state.history.push(JSON.stringify(state.json));
+      const next = state.future.pop();
+      state.json = JSON.parse(next);
+      renderAll();
+      updateUndoRedoButtons();
+    }
+
+    function updateUndoRedoButtons(){
+      $('#btnUndo').disabled = state.history.length===0;
+      $('#btnRedo').disabled = state.future.length===0;
+    }
+
+    function resetAll(){
+      state.json = { title: '', steps: [], links: [] };
+      state.mermaid = state.structuredText = state.svg = '';
+      state.genId = `flow-${uuid(6)}`;
+      state.textId = `text-${uuid(6)}`;
+      state.tableId = `steps-${uuid(6)}`;
+      state.history = []; state.future = [];
+      state.linkLabels = []; state.activeLinkIdx = null; state.activeStepId = null;
+      $('#selExample').value = 'doc_illustration';
+      $('#taSpec').value = EXAMPLES.doc_illustration[state.lang];
+      $('#taEdit').value = '';
+      renderAll();
+      log('reset', { genId: state.genId, textId: state.textId, tableId: state.tableId });
+    }
+
+    /***********************
+     * JSON ⇄ Views
+     ***********************/
+    function buildEdgeLabel(fromId, toId, link){
+      const from = state.json.steps.find(s=>s.id===fromId) || {};
+      const to = state.json.steps.find(s=>s.id===toId) || {};
+      const o = shortenList(from.outputs||[]);
+      const read = shortenList(to.reads||[]);
+      const cond = link.label? `[${link.label}] `: '';
+      const outPart = o && o !== '—' ? `out:${o}` : '';
+      const readPart = read && read !== '—' ? `reads:${read}` : '';
+      const separator = outPart && readPart ? ' ; ' : '';
+      return `${cond}${outPart}${separator}${readPart}`.trim();
+    }
+
+    function jsonToMermaid(json){
+      const lines = [];
+      const labels = [];
+      lines.push('flowchart TD');
+      lines.push('classDef step fill:#eef2ff,stroke:#6366f1,stroke-width:1px,color:#111,border-radius:8px;');
+      lines.push('classDef step-clickable fill:#eef2ff,stroke:#6366f1,stroke-width:2px,color:#111,border-radius:8px,font-weight:bold;');
+
+      // Nodes
+      for(const s of json.steps){
+        const id = s.id;
+        const name = escapeMer(`S${id.replace(/\D/g,'')}: ${s.name || ''}`);
+        const ins = (s.inputs||[]).filter(Boolean).join(', ');
+        const outs = (s.outputs||[]).filter(Boolean).join(', ');
+        const sharedR = (s.reads||[]).filter(Boolean).join(', ');
+        const label = `${name}\n<div class='small'>In: ${truncate(ins)}</div><div class='small'>Out: ${truncate(outs)}</div><div class='small'>Reads: ${truncate(sharedR)}</div>`;
+        lines.push(`${id}["${label}"]:::step-clickable`);
+      }
+
+      // Links with concise data labels
+      (json.links||[]).forEach(l => {
+        const edgeLabel = buildEdgeLabel(l.from, l.to, l);
+        labels.push(edgeLabel);
+        const merLbl = edgeLabel ? `|"${escapeMer(edgeLabel)}"|` : '';
+        lines.push(`${l.from} --> ${merLbl} ${l.to}`);
+      });
+      
+      (json.steps || []).forEach(s => {
+          lines.push(`click ${s.id} call handleStepClick("${s.id}") "Click for details"`);
+      });
+
+      state.linkLabels = labels; // keep for click mapping
+      return lines.join('\n');
+    }
+
+    function jsonToStructured(json){
+      const parts = [];
+      parts.push(`Title: ${json.title || '—'}`);
+      parts.push('');
+      parts.push('Steps:');
+      for(const s of json.steps){
+        parts.push(`${s.id}. ${s.name || ''}`);
+        if(s.description){ parts.push(`   Desc: ${s.description}`); }
+        if(s.inputs?.length)  parts.push(`   Inputs: ${s.inputs.join('; ')}`);
+        if(s.outputs?.length) parts.push(`   Outputs: ${s.outputs.join('; ')}`);
+        if(s.shared?.length)  parts.push(`   Shared(writes): ${s.shared.join('; ')}`);
+        if(s.reads?.length)   parts.push(`   Reads(shared): ${s.reads.join('; ')}`);
+      }
+      parts.push('');
+      parts.push('Links:');
+      for(const [idx,l] of (json.links||[]).entries()){
+        const lbl = state.linkLabels[idx] || l.label || '';
+        parts.push(`   ${l.from} -> ${l.to}${lbl?` [${lbl}]`:''}`);
+      }
+      return parts.join('\n');
+    }
+
+    function populateTable(json){
+      const tb = $('#tblSteps tbody');
+      const th = $('#steps-table-header');
+      tb.innerHTML = '';
+      th.innerHTML = I18N.table_header[state.lang].map(h => `<th class="p-2 border">${h}</th>`).join('');
+
+      for(const s of json.steps){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-2 border align-top mono">${s.id}</td>
+          <td class="p-2 border align-top">${escapeHtml(s.name||'')}</td>
+          <td class="p-2 border align-top small">${escapeHtml((s.inputs||[]).join(', '))}</td>
+          <td class="p-2 border align-top small">${escapeHtml((s.outputs||[]).join(', '))}</td>
+          <td class="p-2 border align-top small">${escapeHtml((s.shared||[]).join(', '))}</td>
+          <td class="p-2 border align-top small">${escapeHtml((s.reads||[]).join(', '))}</td>
+          <td class="p-2 border align-top small"><button class="btn !p-1 !text-xs" data-step="${s.id}">${I18N.table_show_examples[state.lang]}</button></td>`;
+        tb.appendChild(tr);
+      }
+      // hook example buttons
+      $$('#tblSteps [data-step]').forEach(btn=>{
+        btn.addEventListener('click', ()=> openStepExamples(btn.dataset.step));
+      });
+      $('#lblTableId').textContent = state.tableId;
+    }
+
+    function renderAll(){
+      state.mermaid = jsonToMermaid(state.json);
+      $('#lblGenId').textContent = state.genId;
+      renderMermaid(state.mermaid);
+      
+      state.structuredText = jsonToStructured(state.json);
+      $('#structured').textContent = state.structuredText;
+      $('#lblTextId').textContent = state.textId;
+      
+      populateTable(state.json);
+    }
+    
+    window.handleStepClick = (stepId) => {
+        openStepExamples(stepId);
+    };
+
+    function renderMermaid(code){
+      const el = $('#diagram');
+      el.innerHTML = `<div class="text-gray-500 small">Rendering...</div>`;
+      try {
+        mermaid.render('flow'+uuid(6), code).then(({ svg }) => {
+          state.svg = svg;
+          el.innerHTML = svg;
+        }).catch(err => {
+          el.innerHTML = `<div class="text-red-600 small">Mermaid Error: ${escapeHtml(String(err))}</div>`;
+          log('mermaid_error', { error: String(err), code });
+        });
+      } catch (err) {
+          el.innerHTML = `<div class="text-red-600 small">Mermaid Render Failed: ${escapeHtml(String(err))}</div>`;
+          log('mermaid_render_fail', { error: String(err), code });
+      }
+    }
+
+    function truncate(str, max=40){
+      if(!str) return '—';
+      if(str.length<=max) return str;
+      return str.slice(0,max-1)+'…';
+    }
+
+    function shortenList(arr, maxItems=2){
+      const a = (arr||[]).filter(Boolean);
+      const slice = a.slice(0,maxItems).join(',');
+      return a.length > maxItems ? slice + ',…' : slice || '—';
+    }
+
+    function escapeHtml(s){
+      return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    }
+
+    function escapeMer(s){ return (s||'').replace(/"/g, '#quot;'); }
+
+    /***********************
+     * OpenRouter Client
+     ***********************/
+    async function openRouterChat(messages, model, temperature){
+      const key = localStorage.getItem('flowforge.key') || $('#inpKey').value.trim();
+      const offline = $('#chkOffline')?.checked || false;
+
+      const body = JSON.stringify({ model, temperature, messages });
+      log('api_request', { url: 'https://openrouter.ai/api/v1/chat/completions', body: JSON.parse(body) });
+      
+      showProgressBar();
+
+      if(offline || !key){
+        const text = messages[messages.length-1]?.content || '';
+        const mock = heuristicFromText(text);
+        log('api_offline_mock', mock);
+        hideProgressBar();
+        return { json: mock };
+      }
+
+      try {
+          const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${key}`,
+              'X-Title': 'FlowForge',
+            },
+            body
+          });
+
+          const data = await res.json();
+          log('api_response', data);
+
+          if(!res.ok){
+            throw new Error(data?.error?.message || `HTTP ${res.status}`);
+          }
+
+          const content = data.choices?.[0]?.message?.content || '';
+          const json = extractJson(content);
+          return { data, json };
+      } finally {
+          hideProgressBar();
+      }
+    }
+
+    function extractJson(text){
+      const fence = text.match(/```(?:json)?\n([\s\S]*?)```/);
+      const raw = fence ? fence[1] : text;
+      const start = raw.indexOf('{');
+      const end = raw.lastIndexOf('}');
+      if(start>=0 && end>start){
+        try{ return JSON.parse(raw.slice(start, end+1)); }catch(e){ log('json_parse_error', {e:String(e), raw}); }
+      }
+      throw new Error('Could not extract valid JSON from model response.');
+    }
+    
+    let progressInterval;
+    function showProgressBar() {
+        const overlay = $('#progress-overlay');
+        const bar = $('#progress-bar');
+        const text = $('#progress-text');
+        overlay.style.display = 'flex';
+        let seconds = 10;
+        let width = 0;
+        
+        text.innerText = I18N.api_progress_text[state.lang].replace('{s}', seconds);
+        bar.style.width = '0%';
+        
+        clearInterval(progressInterval);
+        progressInterval = setInterval(() => {
+            seconds = Math.max(0, seconds - 0.1);
+            width = (10 - seconds) * 10;
+            bar.style.width = `${width}%`;
+            text.innerText = I18N.api_progress_text[state.lang].replace('{s}', Math.ceil(seconds));
+            if (seconds <= 0) {
+                 // don't stop, just let it sit at 100% until hide is called
+                 bar.style.width = `100%`;
+                 clearInterval(progressInterval);
+            }
+        }, 100);
+    }
+
+    function hideProgressBar() {
+        clearInterval(progressInterval);
+        $('#progress-overlay').style.display = 'none';
+    }
+
+    /***********************
+     * Heuristic offline JSON builder
+     ***********************/
+    function heuristicFromText(text){
+      const sentences = (text||'').split(/[\.!?\n]+/).map(s=>s.trim()).filter(Boolean);
+      const steps = sentences.slice(0,10).map((s,i)=>({
+        id: 'S'+(i+1), name: s.slice(0,50), description: s,
+        inputs: i===0?['user_spec']:[`out_S${i}`], outputs: [`out_S${i+1}`],
+        shared: i%3===0?['meta'] : [], reads: i%2?['meta']:[],
+        examples: { inputs: {}, outputs: {}, reads:{} }
+      }));
+      const links = steps.slice(0,-1).map((_,i)=>({from:'S'+(i+1), to:'S'+(i+2), label:''}));
+      return { title: 'Flow (Offline‑Demo)', steps, links };
+    }
+
+    /***********************
+     * Prompts
+     ***********************/
+    const SYSTEM_PROMPT = `You transform a user's free‑text description of a multi‑step processing flow into a STRICT JSON model.
+Return ONLY JSON. Schema:
+{
+  "title": string,
+  "steps": [
+    {"id": "S1", "name": string, "description": string?,
+     "inputs": string[], "outputs": string[], "shared": string[], "reads": string[],
+     "examples": {"inputs": {}, "outputs": {}, "reads": {}}}
+  ],
+  "links": [ {"from": "S1", "to": "S2", "label": string?} ]
+}
+Rules:
+- Number steps sequentially S1..Sn.
+- Keep names short (<= 6 words). Inputs/outputs are brief tokens (snake_case).
+- Use "shared" for data written to a reusable pool.
+- Use "reads" for shared keys this step consumes.
+- Create branching links with labels like "approved" or "rejected".
+- Do not include Markdown, comments or prose. JSON ONLY.`;
+
+    function buildAnalyzeMessages(spec){
+      return [ { role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: spec } ];
+    }
+
+    function buildEditMessages(currentJson, instructions){
+      const editPrompt = `Modify the existing flow JSON based on the user's instructions. Return ONLY the updated JSON in the same schema. Preserve existing step IDs where possible.`;
+      return [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'assistant', content: JSON.stringify(currentJson) },
+        { role: 'user', content: editPrompt + "\nInstructions:\n" + instructions }
+      ];
+    }
+    
+    function buildExampleMessages(kind, token, step){
+      const brief = {
+        title: state.json.title,
+        step: { id: step.id, name: step.name, description: step.description },
+        all_inputs: step.inputs || [],
+        all_outputs: step.outputs || []
+      };
+      const prompt = `Generate 1-2 minimal, realistic examples for a data token in a process. The token is "${token}" of type "${kind}".
+Context: ${JSON.stringify(brief)}
+Return ONLY JSON like {"examples":["...", "..."]}. No prose.`;
+      return [
+        { role: 'system', content: 'You are an expert data modeler. Return ONLY JSON with an "examples" array. No prose or explanations.' },
+        { role: 'user', content: prompt }
+      ];
+    }
+    
+    function buildExecutionMessage(step, inputsData) {
+        const prompt = `You are an AI executing one step of a process flow.
+Step to execute:
+- Name: ${step.name}
+- Description: ${step.description}
+- Expected outputs: ${JSON.stringify(step.outputs)}
+- Expected shared writes: ${JSON.stringify(step.shared)}
+
+The following data is available as input from previous steps:
+${JSON.stringify(inputsData, null, 2)}
+
+Your task is to generate a plausible result for this step.
+Return ONLY a single JSON object containing the values for the expected outputs and shared writes.
+Example response format: {"output_token_1": "value", "shared_write_token_1": "value"}`;
+        return [{ role: 'system', content: 'You are a helpful AI assistant executing a single process step. Respond ONLY with the JSON data object.' }, { role: 'user', content: prompt }];
+    }
+
+    /***********************
+     * Actions (analyze/edit)
+     ***********************/
+    async function analyze(){
+      const spec = $('#taSpec').value.trim();
+      if(!spec){ alert('Please enter a flow description.'); return; }
+      const model = $('#inpModel').value.trim();
+      const temperature = Number($('#inpTemp').value);
+      try{
+        pushHistory();
+        const { json } = await openRouterChat(buildAnalyzeMessages(spec), model, temperature);
+        state.json = normalizeJson(json);
+        state.genId = `flow-${uuid(6)}`; state.textId = `text-${uuid(6)}`; state.tableId = `steps-${uuid(6)}`;
+        renderAll();
+        log('analyze_done', { json: state.json });
+      }catch(e){ log('analyze_error', { error: String(e) }); alert('Analysis failed: '+ e); }
+    }
+
+    async function applyEdit(){
+      const instr = $('#taEdit').value.trim();
+      if(!instr){ alert('Please enter editing instructions.'); return; }
+      const model = $('#inpModel').value.trim();
+      const temperature = Number($('#inpTemp').value);
+      try{
+        pushHistory();
+        const { json } = await openRouterChat(buildEditMessages(state.json, instr), model, temperature);
+        state.json = normalizeJson(json);
+        renderAll();
+        log('edit_done', { json: state.json });
+      }catch(e){ log('edit_error', { error: String(e) }); alert('Editing failed: '+ e); }
+    }
+
+    function normalizeJson(json){
+      json = json || { title:'', steps:[], links:[] };
+      json.title = json.title || '';
+      json.steps = Array.isArray(json.steps) ? json.steps : [];
+      json.links = Array.isArray(json.links) ? json.links : [];
+      json.steps.forEach((s,i)=>{
+        if(!s.id){ s.id = 'S'+(i+1); }
+        s.examples = s.examples || { inputs:{}, outputs:{}, reads:{} };
+        s.inputs = s.inputs || []; s.outputs = s.outputs || [];
+        s.shared = s.shared || []; s.reads = s.reads || [];
+      });
+      return json;
+    }
+
+    function copyText(text){ navigator.clipboard.writeText(text).then(()=>{ log('copy', { len: text.length }); }).catch(e=>{ alert('Copy failed: '+e); }); }
+
+    function downloadPNG(){
+      if(!state.svg){ alert('No diagram rendered.'); return; }
+      const svg = new Blob([state.svg], {type:'image/svg+xml'});
+      const img = new Image();
+      const url = URL.createObjectURL(svg);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = 2; // for better resolution
+        canvas.width = img.naturalWidth * scale; canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(b => saveBlob(b, `${state.genId}.png`));
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }
+
+    function copyCSV(){
+      const header = I18N.table_header[state.lang].slice(0,-1);
+      const rows = [header];
+      for(const s of state.json.steps){
+        rows.push([s.id, s.name||'', (s.inputs||[]).join('|'), (s.outputs||[]).join('|'), (s.shared||[]).join('|'), (s.reads||[]).join('|')]);
+      }
+      const csv = rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+      copyText(csv);
+    }
+
+    function copyPRDBlock(){
+      const block = [
+`# Flow Spec\nTitle: ${state.json.title || '—'}\n\n## Steps`,
+...state.json.steps.map(s=>`- ${s.id} ${s.name}\n  - Inputs: ${(s.inputs||[]).join(', ') || '—'}\n  - Outputs: ${(s.outputs||[]).join(', ') || '—'}\n  - Shared(w): ${(s.shared||[]).join(', ') || '—'}\n  - Reads(sh?): ${(s.reads||[]).join(', ') || '—'}`),
+'\n## Links',
+...state.json.links.map((l,i)=>`- ${l.from} -> ${l.to}${state.linkLabels[i]?` [${state.linkLabels[i]}]`:''}`),
+'\n## Mermaid', '```mermaid', state.mermaid, '```'
+      ].join('\n');
+      copyText(block);
+    }
+
+    /***********************
+     * API Key storage
+     ***********************/
+    function saveKey(){ localStorage.setItem('flowforge.key', $('#inpKey').value.trim()); alert('Key saved.'); }
+    function clearKey(){ localStorage.removeItem('flowforge.key'); $('#inpKey').value=''; alert('Key cleared.'); }
+    async function testKey(){
+      try{ await openRouterChat([{role:'user', content:'Return {"ok":true} ONLY JSON.'}], $('#inpModel').value.trim(), 0); alert('API ok.'); }
+      catch(e){ alert('API Error: '+e); }
+    }
+
+    /***********************
+     * Export/Import State
+     ***********************/
+    function exportState(){ const blob = new Blob([JSON.stringify({ json: state.json, spec: $('#taSpec').value }, null, 2)], {type:'application/json'}); saveBlob(blob, `flowforge-state-${uuid(6)}.json`); }
+    function exportXML(){
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<flowforge_state>
+  <description><![CDATA[${$('#taSpec').value}]]></description>
+  <structured_text><![CDATA[${state.structuredText}]]></structured_text>
+  <mermaid_diagram><![CDATA[${state.mermaid}]]></mermaid_diagram>
+  <json_data><![CDATA[${JSON.stringify(state.json)}]]></json_data>
+</flowforge_state>`;
+        const blob = new Blob([xml], {type: 'application/xml'});
+        saveBlob(blob, `flowforge-state-${uuid(6)}.xml`);
+    }
+
+    function importFile(file){
+        if (file.name.endsWith('.xml')) {
+            importXML(file);
+        } else {
+            importJSON(file);
+        }
+    }
+
+    function importJSON(file){
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{ 
+          const obj = JSON.parse(reader.result);
+          pushHistory();
+          state.json = normalizeJson(obj.json || obj);
+          if (obj.spec) { $('#taSpec').value = obj.spec; }
+          renderAll();
+          log('import_done (json)', obj);
+        } catch(e){ alert('Invalid file: '+ e); }
+      }; reader.readAsText(file);
+    }
+    
+    function importXML(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(reader.result, "application/xml");
+                const jsonNode = xmlDoc.querySelector("json_data");
+                const descNode = xmlDoc.querySelector("description");
+
+                if (!jsonNode || !jsonNode.textContent) throw new Error("XML file does not contain <json_data>.");
+                
+                pushHistory();
+                state.json = normalizeJson(JSON.parse(jsonNode.textContent));
+                if (descNode && descNode.textContent) {
+                    $('#taSpec').value = descNode.textContent;
+                }
+                renderAll();
+                log('import_done (xml)', { file: file.name });
+            } catch (e) {
+                alert('Invalid XML file: ' + e);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    /***********************
+     * Modal helpers & example generation
+     ***********************/
+    function openModal(){ $('#ioModal').classList.add('open'); }
+    function closeModal(){ $('#ioModal').classList.remove('open'); state.activeStepId = null; }
+
+    function fieldRow(kind, token, examples){
+      const ex = examples?.[token] || '';
+      const id = `${kind}-${token}-${uuid(4)}`;
+      return `<div class="border rounded-xl p-2">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="mono">${kind}:${escapeHtml(token)}</span>
+          <div class="flex items-center gap-2">
+            <button class="btn !p-1 !text-xs" data-gen="${kind}" data-token="${token}">${I18N.generate_ai_example[state.lang]}</button>
+            <button class="btn !p-1 !text-xs" data-copy="${id}">Copy</button>
+          </div>
+        </div>
+        <textarea id="${id}" class="w-full mt-2 mono small border rounded-lg p-2 resize-v" rows="2" placeholder="Example here...">${escapeHtml(ex)}</textarea>
+      </div>`;
+    }
+    
+    function renderStepExamples(stepId) {
+        const step = state.json.steps.find(s => s.id === stepId); if (!step) return;
+
+        $('#ioTitle').textContent = `Step ${stepId}: ${step.name}`;
+        $('#ioSubtitle').textContent = step.description || '';
+        const modalContent = $('#modal-content');
+        
+        modalContent.innerHTML = `
+            <div>
+              <h4 class="font-medium">${I18N.inputs_reads_title[state.lang]}</h4>
+              <div id="ioInputs" class="mt-2 space-y-2"></div>
+            </div>
+            <div>
+              <h4 class="font-medium">${I18N.outputs_writes_title[state.lang]}</h4>
+              <div id="ioOutputs" class="mt-2 space-y-2"></div>
+            </div>
+        `;
+
+        // Inputs & Reads
+        const iBox = $('#ioInputs');
+        const inRows = (step.inputs||[]).map(tok=> fieldRow('input', tok, step.examples?.inputs)).join('');
+        const readRows = (step.reads||[]).map(tok=> fieldRow('read', tok, step.examples?.reads)).join('');
+        iBox.innerHTML = (inRows + readRows) || `<div class="small text-gray-500">${I18N.no_inputs_defined[state.lang]}</div>`;
+
+        // Outputs & Writes
+        const oBox = $('#ioOutputs');
+        const outRows = (step.outputs||[]).map(tok=> fieldRow('output', tok, step.examples?.outputs)).join('');
+        const sharedRows = (step.shared||[]).map(tok => fieldRow('shared', tok, step.examples?.outputs)).join('');
+        oBox.innerHTML = (outRows + sharedRows) || `<div class="small text-gray-500">${I18N.no_outputs_defined[state.lang]}</div>`;
+
+        // Wire buttons
+        $$('#ioModal [data-gen]').forEach(btn=> btn.addEventListener('click', ()=> genExampleForToken(btn.dataset.gen, btn.dataset.token, step)));
+        $$('#ioModal [data-copy]').forEach(btn=> btn.addEventListener('click', ()=> {
+            const ta = $('#'+btn.dataset.copy); if(ta){ copyText(ta.value); }
+        }));
+    }
+
+    async function genExampleForToken(kind, token, step){
+      const model = $('#inpModel').value.trim();
+      try{
+        const { json } = await openRouterChat(buildExampleMessages(kind, token, step), model, 0.2);
+        const examples = json?.examples || [];
+        const text = Array.isArray(examples) ? examples.join(' | ') : String(examples||'');
+        
+        let container;
+        if(kind==='input'){ container = (step.examples.inputs ||= {}); }
+        else if(kind==='read'){ container = (step.examples.reads ||= {}); }
+        else { container = (step.examples.outputs ||= {}); } // covers output and shared
+        container[token] = text;
+        
+        renderStepExamples(state.activeStepId);
+        log('gen_example_done', { kind, token, examples });
+      }catch(e){
+        log('gen_example_error', { error: String(e) });
+        alert('AI Example failed: '+ e);
+      }
+    }
+
+    function openStepExamples(stepId){ 
+      state.activeStepId = stepId;
+      renderStepExamples(stepId);
+      openModal();
+      log('open_step_examples', { stepId }); 
+    }
+    
+    /***********************
+     * Flow Execution
+     ***********************/
+     function startExecution() {
+        if (!state.json.steps || state.json.steps.length === 0) {
+            alert("No flow to execute.");
+            return;
+        }
+        state.execution.active = true;
+        state.execution.currentStepIdx = 0;
+        state.execution.stepData = {};
+        $('#executionTitle').innerText = I18N.execution_modal_title[state.lang];
+        renderExecutionPanel();
+        $('#executionModal').classList.add('open');
+     }
+     
+     function stopExecution() {
+        state.execution.active = false;
+        $('#executionModal').classList.remove('open');
+     }
+     
+     function renderExecutionPanel() {
+        const panel = $('#execution-panel');
+        panel.innerHTML = state.json.steps.map((step, idx) => {
+            const isCurrent = state.execution.currentStepIdx === idx;
+            const isCompleted = idx < state.execution.currentStepIdx;
+            const status = isCompleted ? I18N.step_completed[state.lang] : (isCurrent ? '▶️' : I18N.step_pending[state.lang]);
+            
+            let outputHtml = '';
+            if (state.execution.stepData[step.id]) {
+                outputHtml = `<pre class="mono text-xs bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap">${escapeHtml(JSON.stringify(state.execution.stepData[step.id], null, 2))}</pre>`;
+            }
+            
+            return `
+                <div class="border rounded-lg p-3 ${isCurrent ? 'border-indigo-500 shadow' : ''}">
+                    <div class="flex justify-between items-center">
+                        <h4 class="font-semibold">${step.id}: ${step.name}</h4>
+                        <span class="text-sm font-bold ${isCompleted ? 'text-green-600' : 'text-gray-500'}">${status}</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">${step.description || ''}</p>
+                    <div id="exec-output-${step.id}">${outputHtml}</div>
+                    ${isCurrent ? `<button class="btn btn-primary mt-3" onclick="runCurrentStep()"> ${I18N.run_step_button[state.lang]} </button>` : ''}
+                </div>
+            `;
+        }).join('');
+     }
+     
+     async function runCurrentStep() {
+        const stepIdx = state.execution.currentStepIdx;
+        if (stepIdx < 0 || stepIdx >= state.json.steps.length) return;
+        
+        const step = state.json.steps[stepIdx];
+        
+        // Gather inputs from previous steps' data
+        const inputsData = {};
+        Object.values(state.execution.stepData).forEach(data => {
+            Object.assign(inputsData, data);
+        });
+        
+        log('execution_run_step', { step: step.id, inputsData });
+        
+        try {
+            const model = $('#inpModel').value.trim();
+            const { json } = await openRouterChat(buildExecutionMessage(step, inputsData), model, 0.1);
+            
+            state.execution.stepData[step.id] = json;
+            state.execution.currentStepIdx++;
+            
+            // For now, linear execution. Branching would need UI interaction here.
+            if(state.execution.currentStepIdx >= state.json.steps.length) {
+                // Flow finished
+                state.execution.active = false;
+            }
+            
+            renderExecutionPanel();
+            
+        } catch(e) {
+            log('execution_error', { error: String(e) });
+            alert('Execution failed: '+ e);
+        }
+     }
+
+    /***********************
+     * Events
+     ***********************/
+    $('#btnAnalyze').addEventListener('click', analyze);
+    $('#btnApplyEdit').addEventListener('click', applyEdit);
+    $('#btnCopyMermaid').addEventListener('click', ()=> copyText(state.mermaid));
+    $('#btnPng').addEventListener('click', downloadPNG);
+    $('#btnCopyStruct').addEventListener('click', ()=> copyText(state.structuredText));
+    $('#btnCopyPRD').addEventListener('click', copyPRDBlock);
+    $('#btnCopyCSV').addEventListener('click', copyCSV);
+    $('#btnCopyLog').addEventListener('click', ()=> copyText($('#debug').textContent));
+    $('#btnClearLog').addEventListener('click', ()=> $('#debug').textContent='');
+    $('#btnSaveKey').addEventListener('click', saveKey);
+    $('#btnClearKey').addEventListener('click', clearKey);
+    $('#btnTestKey').addEventListener('click', testKey);
+    $('#btnUndo').addEventListener('click', undo);
+    $('#btnRedo').addEventListener('click', redo);
+    $('#btnReset').addEventListener('click', resetAll);
+    $('#btnExportState').addEventListener('click', exportState);
+    $('#btnExportXML').addEventListener('click', exportXML);
+    $('#fileImportState').addEventListener('change', e => e.target.files?.[0] && importFile(e.target.files[0]));
+    $('#btnLoadExample').addEventListener('click', ()=>{ 
+        const key = $('#selExample').value;
+        if (key && EXAMPLES[key]) {
+            $('#taSpec').value = EXAMPLES[key][state.lang];
+        }
+    });
+
+    $('#btnCloseModal').addEventListener('click', closeModal);
+    $('#ioModal').addEventListener('click', (e)=> { if(e.target===e.currentTarget) closeModal(); });
+    $('#btnGenAll').addEventListener('click', async ()=>{
+      if(!state.activeStepId) return;
+      const step = state.json.steps.find(s=>s.id === state.activeStepId);
+      if(!step) return;
+      
+      for(const tok of (step.inputs||[])) await genExampleForToken('input', tok, step);
+      for(const tok of (step.reads||[])) await genExampleForToken('read', tok, step);
+      for(const tok of (step.outputs||[])) await genExampleForToken('output', tok, step);
+      for(const tok of (step.shared||[])) await genExampleForToken('shared', tok, step);
+    });
+    
+    $$('.lang-btn').forEach(btn => btn.addEventListener('click', () => setLanguage(btn.id.replace('lang-', ''))));
+    
+    // Execution events
+    $('#btnExecuteFlow').addEventListener('click', startExecution);
+    $('#btnCloseExecutionModal').addEventListener('click', stopExecution);
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', e => {
+      if((e.ctrlKey||e.metaKey) && e.key==='z'){ e.preventDefault(); undo(); }
+      if((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.shiftKey && e.key==='Z'))){ e.preventDefault(); redo(); }
+      if(e.key==='Escape') {
+        if ($('#ioModal').classList.contains('open')) closeModal();
+        if ($('#executionModal').classList.contains('open')) stopExecution();
+      }
+    });
+
+    // Initial
+    (function init(){
+      const key = localStorage.getItem('flowforge.key');
+      if(key) $('#inpKey').value = key;
+      const lang = localStorage.getItem('flowforge.lang') || 'de';
+      setLanguage(lang);
+      resetAll();
+      log('init', { ua: navigator.userAgent });
+    })();
+  </script>
+
+</body>
+</html>

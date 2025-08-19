@@ -247,8 +247,15 @@ function getCurrentTranslation(key) {
 
 // Update UI language
 function updateLanguage() {
-    const lang = document.getElementById('languageSelect').value;
-    const translations = I18N[lang];
+    let lang = document.getElementById('languageSelect').value;
+    let translations = I18N[lang];
+
+    // Fallback to English if language is invalid
+    if (!translations) {
+        lang = 'en';
+        translations = I18N[lang];
+        document.getElementById('languageSelect').value = lang;
+    }
 
     // Update all translatable elements
     Object.keys(translations).forEach(key => {

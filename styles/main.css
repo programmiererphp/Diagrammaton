@@ -1,0 +1,653 @@
+/* Main Styles for Diagrammaton */
+
+.btn {
+    @apply px-4 py-2 rounded-md font-medium transition-all duration-200 border;
+}
+
+.btn-primary {
+    @apply bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700;
+}
+
+.btn-secondary {
+    @apply bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200 hover:border-gray-400;
+}
+
+.btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
+}
+
+.card {
+    @apply bg-white rounded-lg shadow-md border border-gray-200 p-6 mb-6;
+}
+
+.modal {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+}
+
+.modal-content {
+    @apply bg-white rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-y-auto m-4 w-full;
+}
+
+.progress-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-40;
+}
+
+.progress-bar {
+    @apply bg-white rounded-lg p-6 shadow-lg;
+}
+
+.tooltip {
+    @apply absolute bg-gray-800 text-white text-sm rounded px-2 py-1 z-10 pointer-events-none opacity-0 transition-opacity duration-200;
+}
+
+.info-btn {
+    @apply w-5 h-5 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer hover:bg-blue-200;
+}
+
+.step-node {
+    cursor: pointer;
+}
+
+.step-node:hover {
+    opacity: 0.8;
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+    .container {
+        @apply px-2;
+    }
+    
+    .card {
+        @apply p-4 mb-4;
+    }
+    
+    .modal-content {
+        @apply m-2;
+    }
+    
+    .flex.space-x-2 {
+        @apply flex-wrap gap-2;
+    }
+    
+    .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-4 {
+        @apply grid-cols-1;
+    }
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+    @apply w-full;
+}
+
+.mermaid svg {
+    @apply w-full h-auto;
+}
+
+/* Table styling */
+table {
+    @apply text-sm;
+}
+
+th, td {
+    @apply text-left;
+}
+
+/* Form elements */
+input, textarea, select {
+    @apply focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+}
+
+textarea {
+    @apply resize-y min-h-[8rem];
+}
+
+/* Details/Summary styling */
+details summary {
+    @apply list-none;
+}
+
+details summary::-webkit-details-marker {
+    @apply hidden;
+}
+
+details summary::before {
+    content: '▶';
+    @apply inline-block mr-2 transition-transform duration-200;
+}
+
+details[open] summary::before {
+    @apply rotate-90;
+}
+
+/* Loading animation */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Hover effects */
+.hover\:bg-gray-100:hover {
+    @apply bg-gray-100;
+}
+
+.hover\:bg-blue-200:hover {
+    @apply bg-blue-200;
+}
+
+.hover\:text-gray-700:hover {
+    @apply text-gray-700;
+}
+
+/* Focus states */
+.focus\:ring-2:focus {
+    @apply ring-2;
+}
+
+.focus\:ring-blue-500:focus {
+    @apply ring-blue-500;
+}
+
+.focus\:border-blue-500:focus {
+    @apply border-blue-500;
+}
+
+/* Disabled states */
+.disabled\:opacity-50:disabled {
+    @apply opacity-50;
+}
+
+.disabled\:cursor-not-allowed:disabled {
+    @apply cursor-not-allowed;
+}
+
+/* Utility classes */
+.hidden {
+    @apply hidden;
+}
+
+.flex {
+    @apply flex;
+}
+
+.items-center {
+    @apply items-center;
+}
+
+.justify-center {
+    @apply justify-center;
+}
+
+.space-x-2 > * + * {
+    @apply ml-2;
+}
+
+.space-x-3 > * + * {
+    @apply ml-3;
+}
+
+.space-x-4 > * + * {
+    @apply ml-4;
+}
+
+.gap-2 {
+    @apply gap-2;
+}
+
+.gap-4 {
+    @apply gap-4;
+}
+
+/* Text utilities */
+.text-xs {
+    @apply text-xs;
+}
+
+.text-sm {
+    @apply text-sm;
+}
+
+.text-xl {
+    @apply text-xl;
+}
+
+.text-4xl {
+    @apply text-4xl;
+}
+
+.font-medium {
+    @apply font-medium;
+}
+
+.font-semibold {
+    @apply font-semibold;
+}
+
+.font-bold {
+    @apply font-bold;
+}
+
+/* Color utilities */
+.text-gray-500 {
+    @apply text-gray-500;
+}
+
+.text-gray-600 {
+    @apply text-gray-600;
+}
+
+.text-gray-700 {
+    @apply text-gray-700;
+}
+
+.text-gray-800 {
+    @apply text-gray-800;
+}
+
+.text-gray-900 {
+    @apply text-gray-900;
+}
+
+.text-blue-600 {
+    @apply text-blue-600;
+}
+
+.text-white {
+    @apply text-white;
+}
+
+.bg-gray-50 {
+    @apply bg-gray-50;
+}
+
+.bg-gray-100 {
+    @apply bg-gray-100;
+}
+
+.bg-gray-200 {
+    @apply bg-gray-200;
+}
+
+.bg-gray-800 {
+    @apply bg-gray-800;
+}
+
+.bg-blue-100 {
+    @apply bg-blue-100;
+}
+
+.bg-blue-600 {
+    @apply bg-blue-600;
+}
+
+.bg-blue-700 {
+    @apply bg-blue-700;
+}
+
+.bg-white {
+    @apply bg-white;
+}
+
+.bg-black {
+    @apply bg-black;
+}
+
+/* Border utilities */
+.border {
+    @apply border;
+}
+
+.border-gray-200 {
+    @apply border-gray-200;
+}
+
+.border-gray-300 {
+    @apply border-gray-300;
+}
+
+.border-gray-400 {
+    @apply border-gray-400;
+}
+
+.border-blue-600 {
+    @apply border-blue-600;
+}
+
+.border-blue-700 {
+    @apply border-blue-700;
+}
+
+.rounded {
+    @apply rounded;
+}
+
+.rounded-md {
+    @apply rounded-md;
+}
+
+.rounded-lg {
+    @apply rounded-lg;
+}
+
+.rounded-full {
+    @apply rounded-full;
+}
+
+/* Shadow utilities */
+.shadow-md {
+    @apply shadow-md;
+}
+
+.shadow-lg {
+    @apply shadow-lg;
+}
+
+/* Spacing utilities */
+.p-2 {
+    @apply p-2;
+}
+
+.p-3 {
+    @apply p-3;
+}
+
+.p-4 {
+    @apply p-4;
+}
+
+.p-6 {
+    @apply p-6;
+}
+
+.px-2 {
+    @apply px-2;
+}
+
+.px-3 {
+    @apply px-3;
+}
+
+.px-4 {
+    @apply px-4;
+}
+
+.py-1 {
+    @apply py-1;
+}
+
+.py-2 {
+    @apply py-2;
+}
+
+.m-2 {
+    @apply m-2;
+}
+
+.m-4 {
+    @apply m-4;
+}
+
+.mb-1 {
+    @apply mb-1;
+}
+
+.mb-2 {
+    @apply mb-2;
+}
+
+.mb-4 {
+    @apply mb-4;
+}
+
+.mb-6 {
+    @apply mb-6;
+}
+
+.mb-8 {
+    @apply mb-8;
+}
+
+.mt-2 {
+    @apply mt-2;
+}
+
+.mt-4 {
+    @apply mt-4;
+}
+
+.mr-2 {
+    @apply mr-2;
+}
+
+.ml-2 {
+    @apply ml-2;
+}
+
+.ml-3 {
+    @apply ml-3;
+}
+
+.ml-4 {
+    @apply ml-4;
+}
+
+/* Layout utilities */
+.w-5 {
+    @apply w-5;
+}
+
+.w-full {
+    @apply w-full;
+}
+
+.h-5 {
+    @apply h-5;
+}
+
+.h-6 {
+    @apply h-6;
+}
+
+.h-24 {
+    @apply h-24;
+}
+
+.h-32 {
+    @apply h-32;
+}
+
+.h-auto {
+    @apply h-auto;
+}
+
+.min-h-screen {
+    @apply min-h-screen;
+}
+
+.max-w-2xl {
+    @apply max-w-2xl;
+}
+
+.max-w-4xl {
+    @apply max-w-4xl;
+}
+
+.max-w-6xl {
+    @apply max-w-6xl;
+}
+
+.max-h-\[90vh\] {
+    max-height: 90vh;
+}
+
+/* Position utilities */
+.fixed {
+    @apply fixed;
+}
+
+.absolute {
+    @apply absolute;
+}
+
+.relative {
+    @apply relative;
+}
+
+.inset-0 {
+    @apply inset-0;
+}
+
+.z-10 {
+    @apply z-10;
+}
+
+.z-40 {
+    z-index: 40;
+}
+
+.z-50 {
+    @apply z-50;
+}
+
+/* Flexbox utilities */
+.flex-1 {
+    @apply flex-1;
+}
+
+.flex-col {
+    @apply flex-col;
+}
+
+.flex-wrap {
+    @apply flex-wrap;
+}
+
+.justify-between {
+    @apply justify-between;
+}
+
+/* Grid utilities */
+.grid {
+    @apply grid;
+}
+
+.grid-cols-1 {
+    @apply grid-cols-1;
+}
+
+/* Overflow utilities */
+.overflow-x-auto {
+    @apply overflow-x-auto;
+}
+
+.overflow-y-auto {
+    @apply overflow-y-auto;
+}
+
+/* Cursor utilities */
+.cursor-pointer {
+    @apply cursor-pointer;
+}
+
+.cursor-not-allowed {
+    @apply cursor-not-allowed;
+}
+
+/* Pointer events */
+.pointer-events-none {
+    @apply pointer-events-none;
+}
+
+/* Transition utilities */
+.transition-all {
+    @apply transition-all;
+}
+
+.transition-opacity {
+    @apply transition-opacity;
+}
+
+.transition-transform {
+    @apply transition-transform;
+}
+
+.duration-200 {
+    @apply duration-200;
+}
+
+/* Transform utilities */
+.rotate-90 {
+    @apply rotate-90;
+}
+
+/* Opacity utilities */
+.opacity-0 {
+    @apply opacity-0;
+}
+
+.opacity-50 {
+    @apply opacity-50;
+}
+
+.opacity-80 {
+    opacity: 0.8;
+}
+
+.bg-opacity-30 {
+    --tw-bg-opacity: 0.3;
+}
+
+.bg-opacity-50 {
+    --tw-bg-opacity: 0.5;
+}
+
+/* Container utilities */
+.container {
+    @apply container;
+}
+
+.mx-auto {
+    @apply mx-auto;
+}
+
+/* Text alignment */
+.text-center {
+    @apply text-center;
+}
+
+.text-left {
+    @apply text-left;
+}
+
+/* Display utilities */
+.block {
+    @apply block;
+}
+
+.inline-block {
+    @apply inline-block;
+}
+
+.inline-flex {
+    @apply inline-flex;
+}
+
+/* List utilities */
+.list-none {
+    @apply list-none;
+}
+
+/* Resize utilities */
+.resize-y {
+    @apply resize-y;
+}
+
+/* Min height utilities */
+.min-h-\[8rem\] {
+    min-height: 8rem;
+}

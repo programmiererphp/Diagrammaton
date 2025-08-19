@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagrammaton - AI-Powered Process Flow Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Progress Overlay -->
+    <div id="progressOverlay" class="progress-overlay hidden">
+        <div class="progress-bar">
+            <div class="flex items-center space-x-3">
+                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <span id="progressText">Processing...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Diagrammaton</h1>
+            <p class="text-gray-600" id="headerSubtitle">AI-Powered Process Flow Generator</p>
+        </div>
+
+        <!-- Configuration Section -->
+        <div class="card">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-xl font-semibold" id="configTitle">Configuration</h2>
+                    <button class="info-btn" onclick="showInfoModal('config')">i</button>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <select id="languageSelect" class="border border-gray-300 rounded px-3 py-1">
+                        <option value="en">English</option>
+                        <option value="de">Deutsch</option>
+                        <option value="ru">Русский</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1" id="apiKeyLabel">OpenRouter API Key</label>
+                    <input type="password" id="apiKey" class="w-full border border-gray-300 rounded px-3 py-2" placeholder="sk-or-...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1" id="modelLabel">Model</label>
+                    <input type="text" id="model" class="w-full border border-gray-300 rounded px-3 py-2" value="google/gemini-2.0-flash-exp">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1" id="temperatureLabel">Temperature</label>
+                    <input type="number" id="temperature" class="w-full border border-gray-300 rounded px-3 py-2" value="0.7" min="0" max="2" step="0.1">
+                </div>
+                <div class="flex items-end">
+                    <button id="testApiBtn" class="btn btn-secondary w-full" onclick="testApi()">
+                        <span id="testApiText">Test API</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Example Flows Section -->
+        <div class="card">
+            <div class="flex items-center space-x-2 mb-4">
+                <h2 class="text-xl font-semibold" id="examplesTitle">Example Flows</h2>
+                <button class="info-btn" onclick="showInfoModal('examples')">i</button>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-4">
+                <select id="exampleSelect" class="flex-1 border border-gray-300 rounded px-3 py-2">
+                    <option value="" id="selectExampleOption">Select an example...</option>
+                    <option value="docx">DOCX Illustration Process</option>
+                    <option value="pingpong">Story Ping-Pong Game</option>
+                    <option value="therapy">Therapy Game</option>
+                    <option value="chatbot">Customer Support Chatbot</option>
+                    <option value="recipe">Chocolate Cake Recipe</option>
+                </select>
+                <button id="loadExampleBtn" class="btn btn-secondary" onclick="loadExample()">
+                    <span id="loadExampleText">Load Example</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Flow Description Section -->
+        <div class="card">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-xl font-semibold" id="descriptionTitle">Flow Description</h2>
+                    <button class="info-btn" onclick="showInfoModal('description')">i</button>
+                </div>
+                <div class="flex space-x-2">
+                    <button id="undoBtn" class="btn btn-secondary" onclick="undo()" disabled>
+                        <span id="undoText">Undo</span>
+                    </button>
+                    <button id="redoBtn" class="btn btn-secondary" onclick="redo()" disabled>
+                        <span id="redoText">Redo</span>
+                    </button>
+                    <button id="resetBtn" class="btn btn-secondary" onclick="resetAll()">
+                        <span id="resetText">Reset</span>
+                    </button>
+                </div>
+            </div>
+            
+            <textarea id="processDescription" class="w-full h-32 border border-gray-300 rounded px-3 py-2 mb-4" 
+                placeholder="Describe your process in natural language..."></textarea>
+            
+            <button id="generateBtn" class="btn btn-primary" onclick="generateDiagram()">
+                <span id="generateText">Generate Diagram</span>
+            </button>
+        </div>
+
+        <!-- Edit Diagram Section -->
+        <div class="card" id="editSection" style="display: none;">
+            <div class="flex items-center space-x-2 mb-4">
+                <h2 class="text-xl font-semibold" id="editTitle">Edit Diagram</h2>
+                <button class="info-btn" onclick="showInfoModal('edit')">i</button>
+            </div>
+            
+            <textarea id="editInstructions" class="w-full h-24 border border-gray-300 rounded px-3 py-2 mb-4" 
+                placeholder="Describe what changes you want to make..."></textarea>
+            
+            <button id="applyChangesBtn" class="btn btn-primary" onclick="applyChanges()">
+                <span id="applyChangesText">Apply Changes</span>
+            </button>
+        </div>
+
+        <!-- Diagram Visualization Section -->
+        <div class="card" id="diagramSection" style="display: none;">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-xl font-semibold" id="diagramTitle">Diagram</h2>
+                    <button class="info-btn" onclick="showInfoModal('diagram')">i</button>
+                </div>
+                <div class="flex space-x-2">
+                    <button id="copyMermaidBtn" class="btn btn-secondary" onclick="copyMermaidCode()">
+                        <span id="copyMermaidText">Copy Mermaid</span>
+                    </button>
+                    <button id="downloadPngBtn" class="btn btn-secondary" onclick="downloadPng()">
+                        <span id="downloadPngText">Download PNG</span>
+                    </button>
+                    <button id="simulateBtn" class="btn btn-primary" onclick="startSimulation()">
+                        <span id="simulateText">Simulate Flow</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="mermaidDiagram" class="border border-gray-300 rounded p-4 bg-white mb-4"></div>
+            
+            <details class="mb-4">
+                <summary class="cursor-pointer font-medium text-gray-700" id="structuredTextSummary">Structured Text View</summary>
+                <pre id="structuredText" class="mt-2 bg-gray-100 p-4 rounded text-sm overflow-x-auto"></pre>
+            </details>
+        </div>
+
+        <!-- Simulation Log Section -->
+        <div class="card" id="simulationLogSection" style="display: none;">
+            <div class="flex items-center space-x-2 mb-4">
+                <h2 class="text-xl font-semibold" id="simulationLogTitle">Simulation Log</h2>
+                <button class="info-btn" onclick="showInfoModal('simulationLog')">i</button>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse border border-gray-300">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-3 py-2 text-left" id="runHeader">Run #</th>
+                            <th class="border border-gray-300 px-3 py-2 text-left" id="stepHeader">Step</th>
+                            <th class="border border-gray-300 px-3 py-2 text-left" id="conditionHeader">Condition</th>
+                            <th class="border border-gray-300 px-3 py-2 text-left" id="inputsHeader">Inputs</th>
+                            <th class="border border-gray-300 px-3 py-2 text-left" id="outputsHeader">Outputs</th>
+                        </tr>
+                    </thead>
+                    <tbody id="simulationLogBody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-4 flex space-x-2">
+                <button id="exportLogBtn" class="btn btn-secondary" onclick="exportSimulationLog()">
+                    <span id="exportLogText">Export Log (CSV)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Import/Export Section -->
+        <div class="card">
+            <div class="flex items-center space-x-2 mb-4">
+                <h2 class="text-xl font-semibold" id="importExportTitle">Import/Export</h2>
+                <button class="info-btn" onclick="showInfoModal('importExport')">i</button>
+            </div>
+            
+            <div class="flex flex-wrap gap-2">
+                <button id="exportJsonBtn" class="btn btn-secondary" onclick="exportJson()">
+                    <span id="exportJsonText">Export JSON</span>
+                </button>
+                <button id="exportXmlBtn" class="btn btn-secondary" onclick="exportXml()">
+                    <span id="exportXmlText">Export XML</span>
+                </button>
+                <input type="file" id="importFile" accept=".json,.xml" style="display: none;" onchange="importFile()">
+                <button id="importBtn" class="btn btn-secondary" onclick="document.getElementById('importFile').click()">
+                    <span id="importText">Import File</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="stepModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold" id="stepModalTitle">Step Details</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeStepModal()">✕</button>
+            </div>
+            <div id="stepModalContent"></div>
+        </div>
+    </div>
+
+    <div id="simulationModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold" id="simulationModalTitle">Flow Simulation</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeSimulationModal()">✕</button>
+            </div>
+            <div id="simulationModalContent">
+                <div class="mb-4">
+                    <h4 class="font-medium mb-2" id="currentStepTitle">Current Step:</h4>
+                    <div id="currentStepInfo" class="bg-gray-100 p-3 rounded"></div>
+                </div>
+                <div class="mb-4" id="userInputSection" style="display: none;">
+                    <label class="block font-medium mb-2" id="userInputLabel">User Input Required:</label>
+                    <input type="text" id="userInputField" class="w-full border border-gray-300 rounded px-3 py-2">
+                </div>
+                <div class="flex space-x-2">
+                    <button id="nextStepBtn" class="btn btn-primary" onclick="executeNextStep()">
+                        <span id="nextStepText">Next Step</span>
+                    </button>
+                    <button id="resetSimulationBtn" class="btn btn-secondary" onclick="resetSimulation()">
+                        <span id="resetSimulationText">Reset Simulation</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="infoModal" class="modal">
+        <div class="modal-content max-w-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold" id="infoModalTitle">Information</h3>
+                <button class="text-gray-500 hover:text-gray-700" onclick="closeInfoModal()">✕</button>
+            </div>
+            <div id="infoModalContent"></div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip"></div>
+
+    <!-- Scripts -->
+    <script src="js/i18n.js"></script>
+    <script src="js/examples.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/diagram.js"></script>
+    <script src="js/simulation.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
